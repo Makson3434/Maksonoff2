@@ -218,7 +218,7 @@ function buildWeapon(type){
  weaponGroup.traverse(o=>{if(o.isMesh){o.castShadow=false;o.frustumCulled=false;}});
 }
 function createPlayer(){
- player={pos:new THREE.Vector3(0,0,20),vel:new THREE.Vector3(),yaw:Math.PI,pitch:0,hp:100,armor:100,alive:true};
+ player={pos:new THREE.Vector3(0,0,20),vel:new THREE.Vector3(),yaw:0,pitch:0,hp:100,armor:100,alive:true};
  camera.position.set(0,1.62,20);camera.rotation.order='YXZ';
 }
 function createBot(x,z){
@@ -234,7 +234,7 @@ function createBot(x,z){
 }
 function resetMatch(){
  for(const b of bots)scene.remove(b.g);bots=[];solids=solids.filter(s=>s.mesh.parent===scene);
- player.pos.set(0,0,20);player.vel.set(0,0,0);player.hp=100;player.armor=100;player.alive=true;player.yaw=Math.PI;player.pitch=0;camera.position.set(0,1.62,20);camera.rotation.set(0,Math.PI,0,'YXZ');
+ player.pos.set(0,0,20);player.vel.set(0,0,0);player.hp=100;player.armor=100;player.alive=true;player.yaw=0;player.pitch=0;camera.position.set(0,1.62,20);camera.rotation.set(0,0,0,'YXZ');
  Object.values(weapons).forEach((w)=>{w.mag=w.magSize;w.reserve=w.reserveMax;});
  weaponType='rifle';buildWeapon(weaponType);kills=0;roundTime=120;bomb={active:true,planted:false,defusing:null,time:35,x:0,z:0};reloading=false;crouched=false;verticalVel=0;onGround=true;
  [[-17,-18],[17,18],[-17,17],[17,-17],[0,-20]].forEach(p=>createBot(...p));
@@ -263,7 +263,12 @@ function showToast(text,duration=1400){
  'НАСТРОЙКИ СОХРАНЕНЫ':['НАСТРОЙКИ СОХРАНЕНЫ','SETTINGS SAVED','EINSTELLUNGEN GESPEICHERT'],
  'НЕТ ПАТРОНОВ · ↻':['НЕТ ПАТРОНОВ · ↻','OUT OF AMMO · ↻','KEINE MUNITION · ↻'],
  'ПЕРЕЗАРЯДКА':['ПЕРЕЗАРЯДКА','RELOADING','NACHLADEN'],
- 'ПРОТИВНИК УСТРАНЁН':['ПРОТИВНИК УСТРАНЁН','ENEMY ELIMINATED','GEGNER ELIMINIERT']
+ 'ПРОТИВНИК УСТРАНЁН':['ПРОТИВНИК УСТРАНЁН','ENEMY ELIMINATED','GEGNER ELIMINIERT'],
+ 'РАУНД ПРИОСТАНОВЛЕН':['РАУНД ПРИОСТАНОВЛЕН','ROUND PAUSED','RUNDE PAUSIERT'],
+ 'ПАУЗА':['ПАУЗА','PAUSED','PAUSIERT'],
+ 'ОРУЖИЕ: ШТУРМОВАЯ ВИНТОВКА':['ОРУЖИЕ: ШТУРМОВАЯ ВИНТОВКА','WEAPON: ASSAULT RIFLE','WAFFE: STURMGEWEHR'],
+ 'ОРУЖИЕ: ТЯЖЁЛЫЙ ПИСТОЛЕТ':['ОРУЖИЕ: ТЯЖЁЛЫЙ ПИСТОЛЕТ','WEAPON: HEAVY PISTOL','WAFFE: SCHWERE PISTOLE'],
+ 'ОРУЖИЕ: БОЕВОЙ НОЖ':['ОРУЖИЕ: БОЕВОЙ НОЖ','WEAPON: COMBAT KNIFE','WAFFE: KAMPFMESSER']
  };
  const entry=translations[text];
  $('toast').textContent=entry?entry[language==='en'?1:language==='de'?2:0]:text;
@@ -309,8 +314,10 @@ function hurtPlayer(amount){
 }
 function endMatch(win){
  gameState='ended';fireHeld=false;pointerRoles.clear();$('overlay').style.display='flex';$('hud').style.display='none';
- $('menutext').innerHTML=win?'<b style="color:#e9b85d">ПОБЕДА</b><br>Все противники устранены. Отличная работа.': '<b style="color:#ff7565">ПОРАЖЕНИЕ</b><br>Вы выбыли из раунда. Попробуйте изменить маршрут и использовать укрытия.';
- $('play').textContent='↻ ИГРАТЬ СНОВА';$('settings').style.display='none';
+ const resultText={ru:win?'<b style="color:#e9b85d">ПОБЕДА</b><br>Все противники устранены. Отличная работа.':'<b style="color:#ff7565">ПОРАЖЕНИЕ</b><br>Вы выбыли из раунда. Versuche es erneut und nutze Deckung.',en:win?'<b style="color:#e9b85d">VICTORY</b><br>All enemies eliminated. Great work.':'<b style="color:#ff7565">DEFEAT</b><br>You were eliminated. Try a different route and use cover.',de:win?'<b style="color:#e9b85d">SIEG</b><br>Alle Gegner ausgeschaltet. Gute Arbeit.':'<b style="color:#ff7565">NIEDERLAGE</b><br>Du wurdest ausgeschaltet. Nutze Deckung und versuche es erneut.'};
+ if(language==='ru'&&!win)resultText.ru='<b style="color:#ff7565">ПОРАЖЕНИЕ</b><br>Вы выбыли из раунда. Попробуйте изменить маршрут и использовать укрытия.';
+ $('menutext').innerHTML=resultText[language]||resultText.ru;
+ $('play').textContent=language==='ru'?'↻ ИГРАТЬ СНОВА':language==='de'?'↻ NOCHMAL SPIELEN':'↻ PLAY AGAIN';$('settings').style.display='none';
 }
 function circleCollides(x,z,r){
  for(const s of solids){if(s.maxY<.1)continue;const nx=clamp(x,s.x-s.w/2,s.x+s.w/2),nz=clamp(z,s.z-s.d/2,s.z+s.d/2);if((x-nx)**2+(z-nz)**2<r*r)return true;}return false;
@@ -464,10 +471,10 @@ function addEvents(){
  $('rifle').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();switchWeapon('rifle');});
  $('pistol').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();switchWeapon('pistol');});
  $('knife').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();switchWeapon('knife');});
- $('pause').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(gameState==='playing'){gameState='paused';fireHeld=false;$('overlay').style.display='flex';$('menutext').innerHTML='<b>ПАУЗА</b><br>Раунд приостановлен.';$('play').textContent='▶ ПРОДОЛЖИТЬ';$('settings').style.display='none';}else if(gameState==='paused'){gameState='playing';$('overlay').style.display='none';}});
+ $('pause').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(gameState==='playing'){gameState='paused';fireHeld=false;$('overlay').style.display='flex';$('menutext').innerHTML=language==='ru'?'<b>ПАУЗА</b><br>Раунд приостановлен.':language==='de'?'<b>PAUSE</b><br>Die Runde ist pausiert.':'<b>PAUSED</b><br>The round is paused.';$('play').textContent=language==='ru'?'▶ ПРОДОЛЖИТЬ':language==='de'?'▶ WEITER':'▶ RESUME';$('settings').style.display='none';}else if(gameState==='paused'){gameState='playing';$('overlay').style.display='none';}});
  $('play').addEventListener('click',()=>{sound('ui');if(gameState==='paused'){gameState='playing';$('overlay').style.display='none';$('play').textContent='▶ ИГРАТЬ';return;}resetMatch();});
  $('settingsBtn').addEventListener('click',()=>{$('settings').style.display=$('settings').style.display==='block'?'none':'block';sound('ui');});
- $('friendsBtn').addEventListener('click',()=>{const room=(Math.random().toString(36).slice(2,7)).toUpperCase();$('menutext').innerHTML='<b>КОМНАТА '+room+'</b><br>Для настоящей совместной игры нужен сервер синхронизации. Эта автономная версия создаёт код комнаты для интерфейса, но не подключает удалённого игрока. Для мультиплеера потребуется WebSocket/WebRTC-сигналинг.';showToast('КОД КОМНАТЫ '+room,2500);});
+ $('friendsBtn').addEventListener('click',()=>{const room=(Math.random().toString(36).slice(2,7)).toUpperCase();$('menutext').innerHTML=language==='ru'?'<b>КОМНАТА '+room+'</b><br>Для настоящей совместной игры нужен сервер синхронизации. Эта версия создаёт код комнаты, но не подключает удалённого игрока.':language==='de'?'<b>RAUM '+room+'</b><br>Für echtes Multiplayer wird ein Synchronisationsserver benötigt. Diese Version zeigt nur einen Raumcode und verbindet keine entfernten Spieler.':'<b>ROOM '+room+'</b><br>Real multiplayer requires a synchronization server. This version displays a room code but does not connect remote players.';showToast('КОД КОМНАТЫ '+room,2500);});
  $('controlsBtn').addEventListener('click',()=>{showToast('ЛЕВЫЙ ДЖОЙСТИК · ПРАВАЯ СТОРОНА — ОБЗОР',2600);sound('ui');});
  $('weaponMenu').addEventListener('click',()=>{switchWeapon(weaponType==='rifle'?'pistol':weaponType==='pistol'?'knife':'rifle');showToast('ОРУЖИЕ: '+weapons[weaponType].name,1800);});
  $('sens').addEventListener('input',e=>{settings.sens=+e.target.value;$('sensVal').textContent=settings.sens.toFixed(1)+'×';});
@@ -475,7 +482,7 @@ function addEvents(){
  $('opacity').addEventListener('input',e=>{settings.opacity=+e.target.value;$('opacityVal').textContent=Math.round(settings.opacity*100)+'%';applySettings();});
  $('quality').addEventListener('change',e=>{settings.quality=e.target.value;applySettings();});
  $('volume').addEventListener('input',e=>{settings.volume=+e.target.value;$('volumeVal').textContent=Math.round(settings.volume*100)+'%';if(masterGain)masterGain.gain.value=settings.volume;});
- $('language').addEventListener('change',e=>{language=e.target.value;applyLanguage();});
+ $('language').addEventListener('change',e=>{language=e.target.value;applyLanguage();updateHUD();});
  $('rounds').addEventListener('change',e=>maxRounds=+e.target.value);
  $('invert').addEventListener('change',e=>settings.invert=e.target.checked);$('vibrate').addEventListener('change',e=>settings.vibrate=e.target.checked);
  $('saveSettings').addEventListener('click',()=>{saveSettings();$('settings').style.display='none';showToast('НАСТРОЙКИ СОХРАНЕНЫ');sound('ui');});
@@ -483,7 +490,7 @@ function addEvents(){
  document.addEventListener('visibilitychange',()=>{if(document.hidden&&gameState==='playing'){gameState='paused';fireHeld=false;$('overlay').style.display='flex';$('menutext').innerHTML='<b>ПАУЗА</b><br>Игра приостановлена.';$('play').textContent='▶ ПРОДОЛЖИТЬ';}});
  document.addEventListener('contextmenu',e=>e.preventDefault());document.addEventListener('gesturestart',e=>e.preventDefault());
 }
-init();
+try{init();}catch(err){console.error('MAKSONOFF2 init failed:',err);const overlay=document.getElementById('overlay');const text=document.getElementById('menutext');if(overlay&&text){overlay.style.display='flex';text.innerHTML='The game could not start. Please reload the page and check that WebGL and an internet connection are available.<br><small>'+String(err&&err.message||err)+'</small>';}}
 </script>
 </body>
 </html>
