@@ -66,7 +66,7 @@ select{background:#263033;color:white;border:1px solid #ffffff35;padding:7px;bor
  <div id="hud">
   <div id="topbar">
    <div class="panel stat">ЗДОРОВЬЕ<strong><b id="hp">100</b> HP</strong><div class="meter"><span id="hpbar"></span></div></div>
-   <div id="roundInfo" class="panel"><strong>MAKSONOFF2</strong><span id="timer">02:00</span><br><small id="scoreline">УСТРАНЕНИЯ 0 / 5</small></div>
+   <div id="roundInfo" class="panel"><strong>MAKSONOFF2</strong><span id="timer">02:00</span><br><small id="scoreline">УСТРАНЕНИЯ 0 / 5</small><br><small id="bombLine">БОМБА: НЕ УСТАНОВЛЕНА</small></div>
    <div class="panel stat">БРОНЯ<strong><b id="armor">100</b></strong><div class="meter"><span id="armorbar" style="background:#78b9d6"></span></div></div>
   </div>
   <canvas id="mini" width="220" height="220"></canvas>
@@ -80,7 +80,7 @@ select{background:#263033;color:white;border:1px solid #ffffff35;padding:7px;bor
    <button class="btn" id="aim">⌖<br><small>ADS</small></button>
    <button class="btn" id="jump">↑<br><small>ПРЫЖОК</small></button>
    <button class="btn" id="crouch">↓<br><small>ПРИСЕСТЬ</small></button>
-   <button class="btn" id="reload">↻</button>
+   <button class="btn" id="reload">↻</button><button class="btn" id="bombBtn" style="right:calc(220px + var(--safeR));bottom:calc(35px + var(--safeB));width:50px;height:50px">💣</button>
    <button class="btn" id="rifle">30</button><button class="btn" id="pistol">7</button><button class="btn" id="knife">✕</button>
   </div>
   <button id="pause">Ⅱ</button>
@@ -94,7 +94,7 @@ select{background:#263033;color:white;border:1px solid #ffffff35;padding:7px;bor
     <button class="action primary" id="play">▶ ИГРАТЬ</button>
     <button class="action" id="weaponMenu">ОРУЖИЕ</button>
     <button class="action" id="settingsBtn">НАСТРОЙКИ</button>
-    <button class="action" id="controlsBtn">УПРАВЛЕНИЕ</button>
+    <button class="action" id="controlsBtn">УПРАВЛЕНИЕ</button><button class="action" id="friendsBtn">ИГРАТЬ С ДРУГОМ</button>
    </div>
    <div id="settings">
     <div class="row"><label for="sens">Чувствительность камеры</label><input id="sens" type="range" min=".5" max="2.5" step=".1" value="1.2"><b id="sensVal">1.2×</b></div>
@@ -102,6 +102,8 @@ select{background:#263033;color:white;border:1px solid #ffffff35;padding:7px;bor
     <div class="row"><label for="opacity">Прозрачность кнопок</label><input id="opacity" type="range" min=".35" max="1" step=".05" value=".75"><b id="opacityVal">75%</b></div>
     <div class="row"><label for="quality">Качество графики</label><select id="quality"><option value="low">Экономное</option><option value="high" selected>Высокое</option></select></div>
     <div class="row"><label for="volume">Громкость звука</label><input id="volume" type="range" min="0" max="1" step=".05" value=".45"><b id="volumeVal">45%</b></div>
+    <div class="row"><label for="language">Язык / Language / Sprache</label><select id="language"><option value="ru">Русский</option><option value="en">English</option><option value="de">Deutsch</option></select></div>
+    <div class="row"><label for="rounds">Раунды / Rounds</label><select id="rounds"><option value="1">1 раунд</option><option value="5" selected>До 5 побед</option><option value="10">До 10 побед</option></select></div>
     <div class="row"><label for="invert">Инверсия вертикали</label><input id="invert" type="checkbox"></div>
     <div class="row"><label for="vibrate">Вибрация (если доступна)</label><input id="vibrate" type="checkbox"></div>
     <button class="action" id="saveSettings">СОХРАНИТЬ</button>
@@ -115,7 +117,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const settings=Object.assign({sens:1.2,stick:100,opacity:.75,quality:'high',volume:.45,invert:false,vibrate:false},JSON.parse(localStorage.getItem('maksonoff2-settings')||'{}'));
+const settings=Object.assign({sens:1.2,stick:100,opacity:.75,quality:'high',volume:.45,invert:true,vibrate:false},JSON.parse(localStorage.getItem('maksonoff2-settings')||'{}'));
 let renderer,scene,camera,clock,gameState='menu',player,weaponGroup,weaponType='rifle',reloading=false,reloadAt=0,fireHeld=false,aiming=false,crouched=false,roundTime=120,kills=0,lastShot=0,hitMarkerUntil=0,damageFlash=0,toastUntil=0,botId=0;
 let bots=[],solids=[],particles=[],tracers=[],keys={},pointerRoles=new Map(),joy={x:0,y:0},lookPointer=null,lastLook={x:0,y:0},lastStep=0,fireCooldown=0, recoil=0, bob=0,camHeight=1.62,verticalVel=0,onGround=true;
 const weapons={
@@ -123,7 +125,7 @@ const weapons={
  pistol:{name:'HEAVY PISTOL',magSize:7,reserveMax:35,mag:7,reserve:35,rate:330,damage:48,spread:.008,reload:1.25,recoil:.055,auto:false},
  knife:{name:'COMBAT KNIFE',magSize:0,reserveMax:0,mag:0,reserve:0,rate:430,damage:65,spread:0,reload:0,recoil:.06,auto:false}
 };
-let audioCtx=null,masterGain=null;
+let audioCtx=null,masterGain=null,roundWins=0,roundLosses=0,maxRounds=5,language='ru',bomb={active:false,planted:false,defusing:null,time:35,x:0,z:0};
 function sound(kind){
  if(settings.volume<=0)return;
  try{
@@ -135,7 +137,7 @@ function sound(kind){
   gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.18,now+.008);gain.gain.exponentialRampToValueAtTime(.0001,now+cfg[1]);osc.start(now);osc.stop(now+cfg[1]+.01);
  }catch(e){}
 }
-function saveSettings(){localStorage.setItem('maksonoff2-settings',JSON.stringify(settings));if(masterGain)masterGain.gain.value=settings.volume;}
+function saveSettings(){localStorage.setItem('maksonoff2-settings',JSON.stringify(settings));localStorage.setItem('maksonoff2-language',language);localStorage.setItem('maksonoff2-rounds',String(maxRounds));if(masterGain)masterGain.gain.value=settings.volume;}
 function makeTexture(type,base){
  const c=document.createElement('canvas');c.width=256;c.height=256;const x=c.getContext('2d');x.fillStyle=base;x.fillRect(0,0,256,256);
  if(type==='brick'){for(let y=0;y<256;y+=32){x.fillStyle='#4e4137';x.fillRect(0,y,256,3);for(let xx=(y/32%2)*32;xx<256;xx+=64)x.fillRect(xx,y,3,32);}}
@@ -233,7 +235,7 @@ function resetMatch(){
  for(const b of bots)scene.remove(b.g);bots=[];solids=solids.filter(s=>s.mesh.parent===scene);
  player.pos.set(0,0,20);player.vel.set(0,0,0);player.hp=100;player.armor=100;player.alive=true;player.yaw=Math.PI;player.pitch=0;camera.position.set(0,1.62,20);camera.rotation.set(0,Math.PI,0,'YXZ');
  Object.values(weapons).forEach((w)=>{w.mag=w.magSize;w.reserve=w.reserveMax;});
- weaponType='rifle';buildWeapon(weaponType);kills=0;roundTime=120;reloading=false;crouched=false;verticalVel=0;onGround=true;
+ weaponType='rifle';buildWeapon(weaponType);kills=0;roundTime=120;bomb={active:true,planted:false,defusing:null,time:35,x:0,z:0};reloading=false;crouched=false;verticalVel=0;onGround=true;
  [[-17,-18],[17,18],[-17,17],[17,-17],[0,-20]].forEach(p=>createBot(...p));
  gameState='playing';$('overlay').style.display='none';$('hud').style.display='block';$('toast').textContent='';updateHUD();
 }
@@ -242,7 +244,8 @@ function updateHUD(){
  $('hp').textContent=Math.max(0,Math.ceil(player.hp));$('armor').textContent=Math.max(0,Math.ceil(player.armor));
  $('hpbar').style.width=clamp(player.hp,0,100)+'%';$('armorbar').style.width=clamp(player.armor,0,100)+'%';
  const w=weapons[weaponType];$('ammo').innerHTML=weaponType==='knife'?'∞ <small>/ MELEE</small><br><small>WEAPON</small>':`${w.mag} <small>/ ${w.reserve}</small><br><small>AMMO</small>`;
- $('weaponName').textContent=w.name;$('scoreline').textContent=`УСТРАНЕНИЯ ${kills} / ${bots.length}`;
+ $('weaponName').textContent=w.name;$('scoreline').textContent=`${kills} / ${bots.length} · РАУНД ${roundWins+roundLosses+1}`;
+ $('bombLine').textContent=bomb.planted?`БОМБА: ${Math.ceil(bomb.time)}с`:'БОМБА: НЕ УСТАНОВЛЕНА';
  $('rifle').classList.toggle('active',weaponType==='rifle');$('pistol').classList.toggle('active',weaponType==='pistol');$('knife').classList.toggle('active',weaponType==='knife');
 }
 function showToast(text,duration=1400){$('toast').textContent=text;toastUntil=performance.now()+duration;}
@@ -265,7 +268,11 @@ function shoot(){
  raycaster.set(camera.position,dir);raycaster.far=70;
  const targets=[];for(const b of bots)if(b.alive)b.g.traverse(o=>{if(o.isMesh)targets.push(o);});
  const hit=raycaster.intersectObjects(targets,false)[0];
- if(hit){const bot=bots.find(b=>b.g===hit.object.parent||b.g.children.includes(hit.object));if(bot){const head=hit.object.geometry.type==='SphereGeometry';damageBot(bot,w.damage*(head?2:1));$('crosshair').classList.add('hit');hitMarkerUntil=now+120;makeParticle(hit.point,0xff5540,7);}else makeParticle(hit.point,0xbba77c,3);}
+ if(hit){const bot=bots.find(b=>b.g===hit.object.parent||b.g.children.includes(hit.object));if(bot){const part=hit.object;
+ const head=part.geometry.type==='SphereGeometry';
+ const relY=hit.point.y-bot.g.position.y;
+ let multiplier=head?2.5:(relY<.62?.72:relY>1.38?1.35:1);
+ damageBot(bot,w.damage*multiplier);$('crosshair').classList.add('hit');hitMarkerUntil=now+120;makeParticle(hit.point,0xff5540,7);}else makeParticle(hit.point,0xbba77c,3);}
  updateHUD();
 }
 function damageBot(bot,amount){
@@ -311,9 +318,9 @@ function updateBots(dt){
   if(!player.alive){b.state='Patrol';}
   else if(visible&&dist<11)b.state='Attack';else if(visible)b.state='Chase';else if(b.search>0)b.state='Search';else b.state='Patrol';
   let vx=0,vz=0;
-  if(b.state==='Attack'){b.g.rotation.y=Math.atan2(dx,dz);if(dist>5){vx=dx/dist*.65;vz=dz/dist*.65;}if(b.shoot<=0&&visible){b.shoot=.85+Math.random()*.55;if(Math.random()<.62)hurtPlayer(7+Math.random()*6);}}
+  if(b.state==='Attack'){b.g.rotation.y=Math.atan2(dx,dz);if(dist>5){const strafe=(Math.sin(performance.now()*.0015+b.id)*.75);vx=dx/dist*.45 + (-dz/dist)*strafe;vz=dz/dist*.45 + (dx/dist)*strafe;}if(b.shoot<=0&&visible){b.shoot=.85+Math.random()*.55;if(Math.random()<.62)hurtPlayer(7+Math.random()*6);}}
   else if(b.state==='Chase'||b.state==='Search'){b.g.rotation.y=Math.atan2(dx,dz);vx=dx/dist*b.speed;vz=dz/dist*b.speed;}
-  else {const pdx=b.patrol.x-b.g.position.x,pdz=b.patrol.z-b.g.position.z,pd=Math.hypot(pdx,pdz);if(pd<.8){b.patrol.set((Math.random()-.5)*35,0,(Math.random()-.5)*35);}else{vx=pdx/pd*.8;vz=pdz/pd*.8;b.g.rotation.y=Math.atan2(pdx,pdz);}}
+  else {const pdx=b.patrol.x-b.g.position.x,pdz=b.patrol.z-b.g.position.z,pd=Math.hypot(pdx,pdz);if(pd<.8){for(let tries=0;tries<8;tries++){const tx=(Math.random()-.5)*38,tz=(Math.random()-.5)*38;if(!circleCollides(tx,tz,.6)){b.patrol.set(tx,0,tz);break;}}}else{vx=pdx/pd*.8;vz=pdz/pd*.8;b.g.rotation.y=Math.atan2(pdx,pdz);}}
   const nx=b.g.position.x+vx*dt,nz=b.g.position.z+vz*dt;if(!circleCollides(nx,b.g.position.z,.4))b.g.position.x=nx;else b.patrol.x+=(Math.random()-.5)*3;if(!circleCollides(b.g.position.x,nz,.4))b.g.position.z=nz;else b.patrol.z+=(Math.random()-.5)*3;
   b.legs.forEach((l,i)=>l.rotation.x=Math.sin(performance.now()*.009+i*Math.PI)*(Math.abs(vx)+Math.abs(vz))*.5);
  }
@@ -331,7 +338,16 @@ function frame(){
  if(gameState==='playing'){
   if(player.alive){movePlayer(dt);updateBots(dt);if(fireHeld&&(weaponType==='rifle'||weaponType==='knife'||now-lastShot>weapons[weaponType].rate))shoot();}
   if(reloading&&now>=reloadAt){const w=weapons[weaponType],take=Math.min(w.magSize-w.mag,w.reserve);w.mag+=take;w.reserve-=take;reloading=false;weaponGroup.position.y=-.28;sound('ui');updateHUD();showToast('ГОТОВО');}
-  roundTime-=dt;if(roundTime<=0)endMatch(kills>=bots.length);$('timer').textContent=`${String(Math.floor(Math.max(0,roundTime)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,roundTime)%60)).padStart(2,'0')}`;
+  roundTime-=dt;
+  if(bomb.active && bomb.planted){
+   bomb.time-=dt;
+   // Living bots near the bomb attempt a timed defuse if they can reach it.
+   const defuser=bots.find(b=>b.alive && Math.hypot(b.g.position.x-bomb.x,b.g.position.z-bomb.z)<1.8);
+   if(defuser){bomb.defusing=(bomb.defusing||0)+dt;if(bomb.defusing>4.5){bomb.planted=false;bomb.active=false;showToast('БОТ ОБЕЗВРЕДИЛ БОМБУ');bomb.defusing=null;}}
+   else bomb.defusing=null;
+   if(bomb.time<=0){showToast('БОМБА ВЗОРВАЛАСЬ');hurtPlayer(150);if(player.alive)endMatch(false);bomb.active=false;}
+  }
+  if(roundTime<=0)endMatch(kills>=bots.length);$('timer').textContent=`${String(Math.floor(Math.max(0,roundTime)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,roundTime)%60)).padStart(2,'0')}`;
   updateMinimap();if(damageFlash>0){damageFlash-=dt;$('hud').style.filter=`drop-shadow(0 0 ${Math.ceil(damageFlash*30)}px #f33)`;}else $('hud').style.filter='';
   if(now>hitMarkerUntil)$('crosshair').classList.remove('hit');if(now>toastUntil&&$('toast').textContent==='ПРОТИВНИК УСТРАНЁН')$('toast').textContent='';
  }
@@ -349,8 +365,17 @@ function init(){
  $('hud').style.display='none';
  addEvents();applySettings();frame();
 }
+function applyLanguage(){
+ const dict={
+ ru:{play:'▶ ИГРАТЬ',weapons:'ОРУЖИЕ',settings:'НАСТРОЙКИ',controls:'УПРАВЛЕНИЕ',desc:'SANDSTONE / ОДИНОЧНАЯ ИГРА<br>Двигайтесь левым джойстиком, осматривайтесь справа и удерживайте ✦ для огня.'},
+ en:{play:'▶ PLAY',weapons:'WEAPONS',settings:'SETTINGS',controls:'CONTROLS',desc:'SANDSTONE / SINGLE PLAYER<br>Move with the left stick, look around on the right, hold ✦ to fire.'},
+ de:{play:'▶ SPIELEN',weapons:'WAFFEN',settings:'EINSTELLUNGEN',controls:'STEUERUNG',desc:'SANDSTONE / EINZELSPIELER<br>Mit dem linken Stick bewegen, rechts umsehen und ✦ zum Schießen halten.'}
+ };
+ const d=dict[language]||dict.ru;$('play').textContent=d.play;$('weaponMenu').textContent=d.weapons;$('settingsBtn').textContent=d.settings;$('controlsBtn').textContent=d.controls;
+ if(gameState==='menu')$('menutext').innerHTML=d.desc;
+}
 function applySettings(){
- $('sens').value=settings.sens;$('sensVal').textContent=settings.sens.toFixed(1)+'×';$('stickSize').value=settings.stick;$('stickVal').textContent=settings.stick+'%';$('opacity').value=settings.opacity;$('opacityVal').textContent=Math.round(settings.opacity*100)+'%';$('quality').value=settings.quality;$('volume').value=settings.volume;$('volumeVal').textContent=Math.round(settings.volume*100)+'%';$('invert').checked=settings.invert;$('vibrate').checked=settings.vibrate;
+ $('language').value=language;$('rounds').value=String(maxRounds);$('sens').value=settings.sens;$('sensVal').textContent=settings.sens.toFixed(1)+'×';$('stickSize').value=settings.stick;$('stickVal').textContent=settings.stick+'%';$('opacity').value=settings.opacity;$('opacityVal').textContent=Math.round(settings.opacity*100)+'%';$('quality').value=settings.quality;$('volume').value=settings.volume;$('volumeVal').textContent=Math.round(settings.volume*100)+'%';$('invert').checked=settings.invert;$('vibrate').checked=settings.vibrate;applyLanguage();
  $('stick').style.width=$('stick').style.height=`${clamp(138*settings.stick/100,105,180)}px`;document.querySelectorAll('.btn').forEach(b=>b.style.opacity=settings.opacity);
  if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio||1,settings.quality==='high'?1.5:1));renderer.shadowMap.enabled=settings.quality==='high';}
 }
@@ -365,7 +390,7 @@ function addEvents(){
  }
  function moveStick(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,max=r.width*.34,len=Math.hypot(dx,dy),f=len>max?max/len:1;joy.x=clamp(dx*f/max,-1,1);joy.y=clamp(dy*f/max,-1,1);knob.style.left=`calc(50% + ${dx*f}px)`;knob.style.top=`calc(50% + ${dy*f}px)`;}
  $('game').addEventListener('pointerdown',onDown);
- window.addEventListener('pointermove',e=>{const role=pointerRoles.get(e.pointerId);if(role==='stick')moveStick(e);else if(role==='look'&&lookPointer===e.pointerId){const dx=e.clientX-lastLook.x,dy=e.clientY-lastLook.y;player.yaw-=dx*.004*settings.sens;player.pitch=clamp(player.pitch+dy*.0035*settings.sens*(settings.invert?-1:1),-1.35,1.35);lastLook={x:e.clientX,y:e.clientY};}},{passive:false});
+ window.addEventListener('pointermove',e=>{const role=pointerRoles.get(e.pointerId);if(role==='stick')moveStick(e);else if(role==='look'&&lookPointer===e.pointerId){const dx=e.clientX-lastLook.x,dy=e.clientY-lastLook.y;player.yaw-=dx*.004*settings.sens;player.pitch=clamp(player.pitch+dy*.0035*settings.sens*(settings.invert?1:-1),-1.35,1.35);lastLook={x:e.clientX,y:e.clientY};}},{passive:false});
  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>window.addEventListener(ev,e=>releasePointer(e.pointerId)));
  $('fire').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(gameState!=='playing')return;pointerRoles.set(e.pointerId,'fire');fireHeld=true;$('fire').classList.add('active');shoot();});
  $('fire').addEventListener('pointerup',e=>{releasePointer(e.pointerId);$('fire').classList.remove('active');});
@@ -375,12 +400,18 @@ function addEvents(){
  $('jump').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(onGround&&gameState==='playing'){verticalVel=5.5;onGround=false;sound('jump');}});
  $('crouch').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();crouched=!crouched;$('crouch').classList.toggle('active',crouched);});
  $('reload').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();reload();});
+ $('bombBtn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(gameState!=='playing')return;
+  if(!bomb.planted && Math.hypot(player.pos.x-(-19),player.pos.z-(-18))<5){bomb.planted=true;bomb.time=35;bomb.x=-19;bomb.z=-18;showToast('БОМБА УСТАНОВЛЕНА · A');sound('ui');}
+  else if(bomb.planted && Math.hypot(player.pos.x-bomb.x,player.pos.z-bomb.z)<2.5){bomb.time=-999;bomb.planted=false;bomb.active=false;showToast('БОМБА ОБЕЗВРЕЖЕНА');sound('ui');}
+  else showToast('БОМБУ МОЖНО УСТАНОВИТЬ РЯДОМ С A',1700);
+ });
  $('rifle').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();switchWeapon('rifle');});
  $('pistol').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();switchWeapon('pistol');});
  $('knife').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();switchWeapon('knife');});
  $('pause').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(gameState==='playing'){gameState='paused';fireHeld=false;$('overlay').style.display='flex';$('menutext').innerHTML='<b>ПАУЗА</b><br>Раунд приостановлен.';$('play').textContent='▶ ПРОДОЛЖИТЬ';$('settings').style.display='none';}else if(gameState==='paused'){gameState='playing';$('overlay').style.display='none';}});
  $('play').addEventListener('click',()=>{sound('ui');if(gameState==='paused'){gameState='playing';$('overlay').style.display='none';$('play').textContent='▶ ИГРАТЬ';return;}resetMatch();});
  $('settingsBtn').addEventListener('click',()=>{$('settings').style.display=$('settings').style.display==='block'?'none':'block';sound('ui');});
+ $('friendsBtn').addEventListener('click',()=>{const room=(Math.random().toString(36).slice(2,7)).toUpperCase();$('menutext').innerHTML='<b>КОМНАТА '+room+'</b><br>Для настоящей совместной игры нужен сервер синхронизации. Эта автономная версия создаёт код комнаты для интерфейса, но не подключает удалённого игрока. Для мультиплеера потребуется WebSocket/WebRTC-сигналинг.';showToast('КОД КОМНАТЫ '+room,2500);});
  $('controlsBtn').addEventListener('click',()=>{showToast('ЛЕВЫЙ ДЖОЙСТИК · ПРАВАЯ СТОРОНА — ОБЗОР',2600);sound('ui');});
  $('weaponMenu').addEventListener('click',()=>{switchWeapon(weaponType==='rifle'?'pistol':weaponType==='pistol'?'knife':'rifle');showToast('ОРУЖИЕ: '+weapons[weaponType].name,1800);});
  $('sens').addEventListener('input',e=>{settings.sens=+e.target.value;$('sensVal').textContent=settings.sens.toFixed(1)+'×';});
@@ -388,6 +419,8 @@ function addEvents(){
  $('opacity').addEventListener('input',e=>{settings.opacity=+e.target.value;$('opacityVal').textContent=Math.round(settings.opacity*100)+'%';applySettings();});
  $('quality').addEventListener('change',e=>{settings.quality=e.target.value;applySettings();});
  $('volume').addEventListener('input',e=>{settings.volume=+e.target.value;$('volumeVal').textContent=Math.round(settings.volume*100)+'%';if(masterGain)masterGain.gain.value=settings.volume;});
+ $('language').addEventListener('change',e=>{language=e.target.value;applyLanguage();});
+ $('rounds').addEventListener('change',e=>maxRounds=+e.target.value);
  $('invert').addEventListener('change',e=>settings.invert=e.target.checked);$('vibrate').addEventListener('change',e=>settings.vibrate=e.target.checked);
  $('saveSettings').addEventListener('click',()=>{saveSettings();$('settings').style.display='none';showToast('НАСТРОЙКИ СОХРАНЕНЫ');sound('ui');});
  window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
