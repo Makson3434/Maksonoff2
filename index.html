@@ -117,7 +117,8 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const settings=Object.assign({sens:1.2,stick:100,opacity:.75,quality:'high',volume:.45,invert:true,vibrate:false},JSON.parse(localStorage.getItem('maksonoff2-settings')||'{}'));
+const settings=Object.assign({sens:1.2,stick:100,opacity:.75,quality:'high',volume:.45,invert:false,vibrate:false},JSON.parse(localStorage.getItem('maksonoff2-settings')||'{}'));
+settings.invert=false; // Correct standard vertical look on first launch after this update.
 let renderer,scene,camera,clock,gameState='menu',player,weaponGroup,weaponType='rifle',reloading=false,reloadAt=0,fireHeld=false,aiming=false,crouched=false,roundTime=120,kills=0,lastShot=0,hitMarkerUntil=0,damageFlash=0,toastUntil=0,botId=0;
 let bots=[],solids=[],particles=[],tracers=[],keys={},pointerRoles=new Map(),joy={x:0,y:0},lookPointer=null,lastLook={x:0,y:0},lastStep=0,fireCooldown=0, recoil=0, bob=0,camHeight=1.62,verticalVel=0,onGround=true;
 const weapons={
@@ -243,12 +244,31 @@ function switchWeapon(type){if(!weapons[type]||weaponType===type)return;weaponTy
 function updateHUD(){
  $('hp').textContent=Math.max(0,Math.ceil(player.hp));$('armor').textContent=Math.max(0,Math.ceil(player.armor));
  $('hpbar').style.width=clamp(player.hp,0,100)+'%';$('armorbar').style.width=clamp(player.armor,0,100)+'%';
- const w=weapons[weaponType];$('ammo').innerHTML=weaponType==='knife'?'∞ <small>/ MELEE</small><br><small>WEAPON</small>':`${w.mag} <small>/ ${w.reserve}</small><br><small>AMMO</small>`;
- $('weaponName').textContent=w.name;$('scoreline').textContent=`${kills} / ${bots.length} · РАУНД ${roundWins+roundLosses+1}`;
- $('bombLine').textContent=bomb.planted?`БОМБА: ${Math.ceil(bomb.time)}с`:'БОМБА: НЕ УСТАНОВЛЕНА';
+ const w=weapons[weaponType],ammoLabel=language==='ru'?'ПАТРОНЫ':language==='de'?'MUNITION':'AMMO',weaponLabel=weaponType==='rifle'?(language==='ru'?'ШТУРМОВАЯ ВИНТОВКА':language==='de'?'STURMGEWEHR':'ASSAULT RIFLE'):weaponType==='pistol'?(language==='ru'?'ТЯЖЁЛЫЙ ПИСТОЛЕТ':language==='de'?'SCHWERE PISTOLE':'HEAVY PISTOL'):(language==='ru'?'БОЕВОЙ НОЖ':language==='de'?'KAMPFMESSER':'COMBAT KNIFE');
+ $('ammo').innerHTML=weaponType==='knife'?'∞ <small>/ '+(language==='ru'?'БЛИЖНИЙ БОЙ':language==='de'?'NAHKAMPF':'MELEE')+'</small><br><small>'+ (language==='ru'?'ОРУЖИЕ':language==='de'?'WAFFE':'WEAPON')+'</small>':`${w.mag} <small>/ ${w.reserve}</small><br><small>${ammoLabel}</small>`;
+ $('weaponName').textContent=weaponLabel;
+ $('scoreline').textContent=`${kills} / ${bots.length} · ${(language==='ru'?'РАУНД':language==='de'?'RUNDE':'ROUND')} ${roundWins+roundLosses+1}`;
+ $('bombLine').textContent=bomb.planted?(language==='ru'?'БОМБА: ':language==='de'?'BOMBE: ':'BOMB: ')+Math.ceil(bomb.time)+(language==='ru'?'с':language==='de'?'s':'s'):(language==='ru'?'БОМБА: НЕ УСТАНОВЛЕНА':language==='de'?'BOMBE: NICHT GELEGT':'BOMB: NOT PLANTED');
  $('rifle').classList.toggle('active',weaponType==='rifle');$('pistol').classList.toggle('active',weaponType==='pistol');$('knife').classList.toggle('active',weaponType==='knife');
 }
-function showToast(text,duration=1400){$('toast').textContent=text;toastUntil=performance.now()+duration;}
+function showToast(text,duration=1400){
+ const translations={
+ 'БОМБА ВЗОРВАЛАСЬ':['БОМБА ВЗОРВАЛАСЬ','BOMB EXPLODED','BOMBE EXPLODIERT'],
+ 'БОМБА ОБЕЗВРЕЖЕНА':['БОМБА ОБЕЗВРЕЖЕНА','BOMB DEFUSED','BOMBE ENTSCHÄRFT'],
+ 'БОМБА УСТАНОВЛЕНА · A':['БОМБА УСТАНОВЛЕНА · A','BOMB PLANTED · A','BOMBE GELEGT · A'],
+ 'БОМБУ МОЖНО УСТАНОВИТЬ РЯДОМ С A':['БОМБУ МОЖНО УСТАНОВИТЬ РЯДОМ С A','PLANT THE BOMB NEAR SITE A','BOMBE IN DER NÄHE VON A PLATZIEREN'],
+ 'БОТ ОБЕЗВРЕДИЛ БОМБУ':['БОТ ОБЕЗВРЕДИЛ БОМБУ','BOT DEFUSED THE BOMB','BOT HAT DIE BOMBE ENTSCHÄRFT'],
+ 'ГОТОВО':['ГОТОВО','READY','BEREIT'],
+ 'ЛЕВЫЙ ДЖОЙСТИК · ПРАВАЯ СТОРОНА — ОБЗОР':['ЛЕВЫЙ ДЖОЙСТИК · ПРАВАЯ СТОРОНА — ОБЗОР','LEFT STICK · RIGHT SIDE TO LOOK AROUND','LINKER STICK · RECHTS UMSCHAUEN'],
+ 'НАСТРОЙКИ СОХРАНЕНЫ':['НАСТРОЙКИ СОХРАНЕНЫ','SETTINGS SAVED','EINSTELLUNGEN GESPEICHERT'],
+ 'НЕТ ПАТРОНОВ · ↻':['НЕТ ПАТРОНОВ · ↻','OUT OF AMMO · ↻','KEINE MUNITION · ↻'],
+ 'ПЕРЕЗАРЯДКА':['ПЕРЕЗАРЯДКА','RELOADING','NACHLADEN'],
+ 'ПРОТИВНИК УСТРАНЁН':['ПРОТИВНИК УСТРАНЁН','ENEMY ELIMINATED','GEGNER ELIMINIERT']
+ };
+ const entry=translations[text];
+ $('toast').textContent=entry?entry[language==='en'?1:language==='de'?2:0]:text;
+ toastUntil=performance.now()+duration;
+}
 function makeParticle(pos,color=0xe2b66b,count=5){
  for(let i=0;i<count&&particles.length<90;i++){
   const m=new THREE.Mesh(new THREE.SphereGeometry(.035+Math.random()*.025,5,4),new THREE.MeshBasicMaterial({color,transparent:true,opacity:1}));
@@ -367,12 +387,48 @@ function init(){
 }
 function applyLanguage(){
  const dict={
- ru:{play:'▶ ИГРАТЬ',weapons:'ОРУЖИЕ',settings:'НАСТРОЙКИ',controls:'УПРАВЛЕНИЕ',desc:'SANDSTONE / ОДИНОЧНАЯ ИГРА<br>Двигайтесь левым джойстиком, осматривайтесь справа и удерживайте ✦ для огня.'},
- en:{play:'▶ PLAY',weapons:'WEAPONS',settings:'SETTINGS',controls:'CONTROLS',desc:'SANDSTONE / SINGLE PLAYER<br>Move with the left stick, look around on the right, hold ✦ to fire.'},
- de:{play:'▶ SPIELEN',weapons:'WAFFEN',settings:'EINSTELLUNGEN',controls:'STEUERUNG',desc:'SANDSTONE / EINZELSPIELER<br>Mit dem linken Stick bewegen, rechts umsehen und ✦ zum Schießen halten.'}
- };
- const d=dict[language]||dict.ru;$('play').textContent=d.play;$('weaponMenu').textContent=d.weapons;$('settingsBtn').textContent=d.settings;$('controlsBtn').textContent=d.controls;
- if(gameState==='menu')$('menutext').innerHTML=d.desc;
+ ru:{
+  play:'▶ ИГРАТЬ',weapons:'ОРУЖИЕ',settings:'НАСТРОЙКИ',controls:'УПРАВЛЕНИЕ',friends:'ИГРАТЬ С ДРУГОМ',
+  desc:'SANDSTONE / ОДИНОЧНАЯ ИГРА<br>Тактическая демоверсия для сенсорного экрана. Двигайтесь левым джойстиком, осматривайтесь справа и удерживайте ✦ для огня.',
+  health:'ЗДОРОВЬЕ',armor:'БРОНЯ',eliminations:'УСТРАНЕНИЯ',bomb:'БОМБА: НЕ УСТАНОВЛЕНА',area:'SANDSTONE · ЦЕНТР',ready:'ГОТОВ',ammo:'ПАТРОНЫ',
+  sensitivity:'Чувствительность камеры',stickSize:'Размер джойстика',opacity:'Прозрачность кнопок',quality:'Качество графики',volume:'Громкость звука',language:'Язык / Language / Sprache',rounds:'Количество раундов',invert:'Инверсия вертикали',vibrate:'Вибрация (если доступна)',save:'СОХРАНИТЬ',
+  low:'Экономное',high:'Высокое',one:'1 раунд',five:'До 5 побед',ten:'До 10 побед',jump:'ПРЫЖОК',crouch:'ПРИСЕСТЬ',rotate:'Поверните iPad',rotateDesc:'MAKSONOFF2 лучше всего работает в горизонтальной ориентации.'
+ },
+ en:{
+  play:'▶ PLAY',weapons:'WEAPONS',settings:'SETTINGS',controls:'CONTROLS',friends:'PLAY WITH A FRIEND',
+  desc:'SANDSTONE / SINGLE PLAYER<br>A tactical touchscreen demo. Move with the left stick, look around on the right, and hold ✦ to fire.',
+  health:'HEALTH',armor:'ARMOR',eliminations:'ELIMINATIONS',bomb:'BOMB: NOT PLANTED',area:'SANDSTONE · MID',ready:'READY',ammo:'AMMO',
+  sensitivity:'Camera sensitivity',stickSize:'Joystick size',opacity:'Button opacity',quality:'Graphics quality',volume:'Sound volume',language:'Language',rounds:'Rounds',invert:'Invert vertical look',vibrate:'Vibration (if available)',save:'SAVE SETTINGS',
+  low:'Low',high:'High',one:'1 round',five:'First to 5 wins',ten:'First to 10 wins',jump:'JUMP',crouch:'CROUCH',rotate:'Rotate your iPad',rotateDesc:'MAKSONOFF2 works best in landscape orientation.'
+ },
+ de:{
+  play:'▶ SPIELEN',weapons:'WAFFEN',settings:'EINSTELLUNGEN',controls:'STEUERUNG',friends:'MIT FREUND SPIELEN',
+  desc:'SANDSTONE / EINZELSPIELER<br>Taktische Touchscreen-Demo. Mit dem linken Stick bewegen, rechts umsehen und ✦ zum Schießen halten.',
+  health:'LEBEN',armor:'RÜSTUNG',eliminations:'ELIMINIERUNGEN',bomb:'BOMBE: NICHT GELEGT',area:'SANDSTONE · MITTE',ready:'BEREIT',ammo:'MUNITION',
+  sensitivity:'Kameraempfindlichkeit',stickSize:'Joystickgröße',opacity:'Tasten-Transparenz',quality:'Grafikqualität',volume:'Lautstärke',language:'Sprache',rounds:'Runden',invert:'Vertikale Steuerung umkehren',vibrate:'Vibration (falls verfügbar)',save:'SPEICHERN',
+  low:'Niedrig',high:'Hoch',one:'1 Runde',five:'Bis 5 Siege',ten:'Bis 10 Siege',jump:'SPRINGEN',crouch:'DUCKEN',rotate:'iPad drehen',rotateDesc:'MAKSONOFF2 funktioniert am besten im Querformat.'
+ }};
+ const d=dict[language]||dict.ru;
+ $('play').textContent=d.play;$('weaponMenu').textContent=d.weapons;$('settingsBtn').textContent=d.settings;$('controlsBtn').textContent=d.controls;$('friendsBtn').textContent=d.friends;
+ $('menutext').innerHTML=d.desc;
+ $('.eyebrow').textContent=language==='ru'?'ТАКТИЧЕСКИЙ FPS · МОБИЛЬНАЯ ВЕРСИЯ':language==='de'?'TAKTISCHER FPS · MOBILE VERSION':'TACTICAL FPS · MOBILE EDITION';
+ const setLabel=(forId,text)=>{const el=document.querySelector('label[for="'+forId+'"]');if(el)el.textContent=text;};
+ ['sens','stickSize','opacity','quality','volume','language','rounds','invert','vibrate'].forEach((id,i)=>setLabel(id,[d.sensitivity,d.stickSize,d.opacity,d.quality,d.volume,d.language,d.rounds,d.invert,d.vibrate][i]));
+ $('saveSettings').textContent=d.save;
+ const q=$('quality');q.options[0].text=d.low;q.options[1].text=d.high;
+ const r=$('rounds');r.options[0].text=d.one;r.options[1].text=d.five;r.options[2].text=d.ten;
+ $('hpLabel')?.replaceChildren(document.createTextNode(d.health));
+ const statLabels=document.querySelectorAll('#topbar .stat');
+ if(statLabels[0])statLabels[0].childNodes[0].textContent=d.health;
+ if(statLabels[1])statLabels[1].childNodes[0].textContent=d.armor;
+ $('scoreline').textContent=`${kills} / ${bots.length} · ${d.eliminations}`;
+ $('bombLine').textContent=bomb.planted?(language==='en'?'BOMB: '+Math.ceil(bomb.time)+'s':language==='de'?'BOMBE: '+Math.ceil(bomb.time)+'s':'БОМБА: '+Math.ceil(bomb.time)+'с'):d.bomb;
+ $('weaponName').textContent=language==='ru'?'ШТУРМОВАЯ ВИНТОВКА':language==='de'?'STURMGEWEHR':'ASSAULT RIFLE';
+ $('stateLine').textContent=d.ready;
+ $('ammo').innerHTML=weaponType==='knife'?'∞ <small>/ '+(language==='ru'?'БЛИЖНИЙ БОЙ':language==='de'?'NAHKAMPF':'MELEE')+'</small><br><small>'+ (language==='ru'?'ОРУЖИЕ':language==='de'?'WAFFE':'WEAPON')+'</small>':`${weapons[weaponType].mag} <small>/ ${weapons[weaponType].reserve}</small><br><small>${d.ammo}</small>`;
+ $('jump').innerHTML='↑<br><small>'+d.jump+'</small>';$('crouch').innerHTML='↓<br><small>'+d.crouch+'</small>';
+ $('rotate').querySelector('h2').textContent=d.rotate;$('rotate').querySelector('p').textContent=d.rotateDesc;
+ document.documentElement.lang=language;
 }
 function applySettings(){
  $('language').value=language;$('rounds').value=String(maxRounds);$('sens').value=settings.sens;$('sensVal').textContent=settings.sens.toFixed(1)+'×';$('stickSize').value=settings.stick;$('stickVal').textContent=settings.stick+'%';$('opacity').value=settings.opacity;$('opacityVal').textContent=Math.round(settings.opacity*100)+'%';$('quality').value=settings.quality;$('volume').value=settings.volume;$('volumeVal').textContent=Math.round(settings.volume*100)+'%';$('invert').checked=settings.invert;$('vibrate').checked=settings.vibrate;applyLanguage();
@@ -390,7 +446,7 @@ function addEvents(){
  }
  function moveStick(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,max=r.width*.34,len=Math.hypot(dx,dy),f=len>max?max/len:1;joy.x=clamp(dx*f/max,-1,1);joy.y=clamp(dy*f/max,-1,1);knob.style.left=`calc(50% + ${dx*f}px)`;knob.style.top=`calc(50% + ${dy*f}px)`;}
  $('game').addEventListener('pointerdown',onDown);
- window.addEventListener('pointermove',e=>{const role=pointerRoles.get(e.pointerId);if(role==='stick')moveStick(e);else if(role==='look'&&lookPointer===e.pointerId){const dx=e.clientX-lastLook.x,dy=e.clientY-lastLook.y;player.yaw-=dx*.004*settings.sens;player.pitch=clamp(player.pitch+dy*.0035*settings.sens*(settings.invert?1:-1),-1.35,1.35);lastLook={x:e.clientX,y:e.clientY};}},{passive:false});
+ window.addEventListener('pointermove',e=>{const role=pointerRoles.get(e.pointerId);if(role==='stick')moveStick(e);else if(role==='look'&&lookPointer===e.pointerId){const dx=e.clientX-lastLook.x,dy=e.clientY-lastLook.y;player.yaw-=dx*.004*settings.sens;player.pitch=clamp(player.pitch+dy*.0035*settings.sens*(settings.invert?-1:1),-1.35,1.35);lastLook={x:e.clientX,y:e.clientY};}},{passive:false});
  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>window.addEventListener(ev,e=>releasePointer(e.pointerId)));
  $('fire').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(gameState!=='playing')return;pointerRoles.set(e.pointerId,'fire');fireHeld=true;$('fire').classList.add('active');shoot();});
  $('fire').addEventListener('pointerup',e=>{releasePointer(e.pointerId);$('fire').classList.remove('active');});
